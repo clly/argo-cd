@@ -6,6 +6,7 @@
 A working Single Sign-On configuration using Okta via at least two methods was achieved using:
 
 * [SAML (with Dex)](#saml-with-dex)
+* [OIDC (with Dex)](#oidc-with-dex)
 * [OIDC (without Dex)](#oidc-without-dex)
 
 ## SAML (with Dex)
@@ -108,10 +109,46 @@ data:
   scopes: '[email,groups]'
 ```
 
+## OIDC (with Dex)
+Dex can be configured to handle OIDC authentication for Okta instead of going directly through Argo. Dex will fetch user and group information from the /userdata endpoint and merge it with the OpenID claims. It makes it possible to use group information for RBAC without including it in the token itself.
+
+!!! warning "Group information is only updated on token refresh"
+When group information is fetched it's only updated when the token refreshed. Group information will potentially be stale and a user will have access to Argo until the ID token is refreshed. 
+
+1. Create new OIDC application in Okta
+1. Configure the Sign-in redirect URI
+1. Edit the `argocd-cm` and configure the `data.dex.config` section:
+
+<!-- markdownlint-disable MD046 -->
+```yaml
+dex.config: |
+    connectors:
+    - type: oidc
+      id: okta
+      name: Okta
+      config:
+        # canonical URL of the provider and used for configuration discovery: https://yourorganization.oktapreview.com/.well-known/openid-configuration
+        issuer: https://yourorganization.oktapreview.com
+        clientID: 0oaltaqg3oAIf2NOa0h3
+        clientSecret: ZXF_CfUc-rtwNfzFecGquzdeJ_MxM4sGc8pDT2Tg6t
+        redirectURI: https://ui.argocd.yourorganization.net/api/dex/callback
+        # dex will fetch user information from Okta for us: https://yourorganization.oktapreview.com/.well-known/userinfo
+        # https://openid.net/specs/openid-connect-core-1_0.html#UserInfo
+        
+        getUserInfo: true
+        insecureEnableGroups: true
+        scopes:
+          - openid
+          - profile
+          - email
+          - groups
+```
+<!-- markdownlint-enable MD046 -->
+
 ## OIDC (without Dex)
 
 !!! warning "Do you want groups for RBAC later?"
-    If you want `groups` scope returned from Okta you need to unfortunately contact support to enable [API Access Management with Okta](https://developer.okta.com/docs/concepts/api-access-management/) or [_just use SAML above!_](#saml-with-dex)
+    If you want `groups` scope returned from Okta you need to unfortunately contact support to enable [API Access Management with Okta](https://developer.okta.com/docs/concepts/api-access-management/), use [OIDC with Dex](#oidc-with-dex) or [use SAML above!](#saml-with-dex)
 
     Next you may need the API Access Management feature, which the support team can enable for your OktaPreview domain for testing, to enable "custom scopes" and a separate endpoint to use instead of the "public" `/oauth2/v1/authorize` API Access Management endpoint. This might be a paid feature if you want OIDC unfortunately. The free alternative I found was SAML.
 
